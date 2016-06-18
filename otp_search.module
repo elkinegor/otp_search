@@ -1,0 +1,127 @@
+<?php
+
+function otp_search_menu() {
+	
+  $items['ajax/otp_search/data'] = array(
+    'title' => 'OTP search data',
+    'page callback' => 'otp_search_data',
+		//'page arguments' => array(),
+    'access arguments' => array('access content'),
+    'type' => MENU_CALLBACK,
+    //'delivery callback' => 'ajax_deliver',
+  );	
+	return $items;
+}
+ 
+/**
+* Implements hook_search_info()
+*/
+function otp_search_search_info() {
+	return array(
+	' title' => 'All otp content' ,
+	);
+}
+
+function  otp_search_data() { 
+  echo('<ul>');
+	$search_result =  otp_search_search_execute($_POST['search']);
+	foreach ($search_result as $item) {
+		echo('<li><a href="'.$item['link'].'" >'.$item['title'].'</a></li>');
+	}
+	echo('</ul>');
+}
+
+function otp_search_form_alter(&$form, &$form_state, $form_id) {
+		if ($form_id == 'search_block_form') {
+			drupal_add_js(drupal_get_path('module', 'otp_search') . '/otp_search.js');
+		}		
+	}
+
+
+/**
+ * Implements hook_search_execute().
+ */
+ 
+function otp_search_search_execute($keys = NULL, $conditions = NULL) {
+
+// Set up and execute the query
+/* $query = db_select('search_index', 'i')->extend('SearchQuery')->extend('PagerDefault');
+ $query->join('cases_case', 'ca', 'ca.case_id = i.sid');
+ $query->searchExpression($keys, 'case');*/
+// If there weren't any results then return a blank result set
+
+
+	//$keys  = str_replace(" ", ",", $keys);
+	$keys = explode(" ", $keys);
+	
+	$index = db_query("SELECT * FROM {search_index} WHERE word IN (:keys)", array(':keys' => $keys))->fetchAll();
+	
+	$results = array();
+
+ foreach ($index as $item) {
+	 
+	// drupal_set_message(print_r($item->type,true));
+	 
+	 $note= '';
+	 switch ($item->type) {
+    case 'node':
+		
+			$node = node_load($item->sid);
+			node_build_content($node, 'search_result');
+			$node->body = drupal_render($node->content);
+	
+			$node->rendered .= ' ' . module_invoke('comment', 'node_update_index', $node);
+			$node->rendered .= ' ' . module_invoke('taxonomy', 'node_update_index', $node);
+	
+			$extra = module_invoke_all('node_search_result', $node);
+	
+			$results[] = array(
+				'link' => url('node/' . $item->sid, array('absolute' => TRUE)),
+				'type' => check_plain(node_type_get_name($node)),
+				'title' => $node->title,
+				'user' => theme('username', array('account' => $node)),
+				'date' => $node->changed,
+				'node' => $node,
+				'extra' => $extra,
+				'score' => $item->score,
+				'snippet' => search_excerpt($keys, $node->body),
+			);
+        break;
+    case 'case':
+       $note= cases_case_load($item->sid);
+			 $results[] = array(
+			 'link' => url('cases/case/'.$note->case_id, array()),
+			 'type' => t('Note'),
+			 'title' => $note->name,
+			 'date' => '',
+			 'score' => $item->score,
+			 'snippet' => search_excerpt($keys, $note->description));
+        break;
+    case 'tm':
+        $note = team_members_member_load($item->sid);
+				 $results[] = array(
+				 'link' => url('team_members/member/'.$note->tm_id.'/view', array()),
+				 'type' => t('Note'),
+				 'title' => $note->name.' | '.$note->title,
+				 'date' => '',
+				 'score' => $item->score,
+				 'snippet' => search_excerpt($keys, $note->detail));
+        break;
+		case 'pub':
+			if (isset($note->p_id)) {
+        $note= team_members_member_load($item->sid);
+				$results[] = array(
+				 'link' => url('publications/publication/'.$note->p_id, array()),
+				 'type' => t('Note'),
+				 'title' => $note->title,
+				 'date' => '',
+				 'score' => $item->score,
+				 'snippet' => search_excerpt($keys, $note->abstract));
+			}
+        break;
+		}	
+		//drupal_set_message(print_r($note,true));
+ }
+ return $results;
+}
+

@@ -1,0 +1,7 @@
+name = OTP Search
+description = Create ability search otp custom content.
+core = 7.x
+dependencies[] = team_members
+dependencies[] = publications
+dependencies[] = cases
+package = OTP
